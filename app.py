@@ -15,7 +15,7 @@ BUCKET = "photos"
 CSS = """
 <style>
 .stApp { background:#0e1117; }
-.block-container { padding: 1rem 0.9rem 4rem; max-width: 640px; }
+.block-container { padding: 4rem 0.9rem 4rem; max-width: 640px; }
 h1, h2, h3 { letter-spacing: -0.02em; }
 div.stButton > button {
     width: 100%; text-align: left; justify-content: flex-start;
@@ -24,6 +24,9 @@ div.stButton > button {
 }
 div.stButton > button:hover { border-color:#7c6cf0; color:#fff; }
 div[data-testid="stImage"] img { border-radius:12px; object-fit:cover; }
+div[data-testid="stColumn"] div[data-testid="stImage"] img {
+    width:100%; height:auto; aspect-ratio:1/1; object-fit:cover;
+}
 .badge { display:inline-block; padding:.15rem .6rem; border-radius:999px;
          font-size:.8rem; background:#232838; color:#cfd3e0; }
 .muted { color:#8b92a5; font-size:.85rem; }
