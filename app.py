@@ -34,6 +34,13 @@ div[data-testid="stImage"] img { border-radius:12px; object-fit:cover; }
 div[data-testid="stColumn"] div[data-testid="stImage"] img {
     width:100%; height:auto; aspect-ratio:1/1; object-fit:cover;
 }
+/* righe delle categorie in home: sempre affiancate, anche su telefono */
+.st-key-catlist [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important; gap: .75rem !important; align-items: center;
+}
+.st-key-catlist [data-testid="stColumn"] { min-width: 0 !important; }
+.st-key-catlist [data-testid="stColumn"]:first-child { flex: 0 0 64px !important; width: 64px !important; }
+.st-key-catlist [data-testid="stColumn"]:last-child { flex: 1 1 auto !important; width: auto !important; }
 /* lista pulita degli elementi */
 .st-key-itemlist [data-testid="stHorizontalBlock"] {
     flex-wrap: nowrap !important; gap: .5rem !important;
@@ -239,18 +246,19 @@ def home():
         st.info("Nessuna categoria ancora. Creane una qui sopra!")
         return
 
-    for c in categories:
-        n = sum(1 for i in items if i["category_id"] == c["id"])
-        col_img, col_btn = st.columns([1, 4], vertical_alignment="center")
-        if c.get("cover_url"):
-            col_img.image(c["cover_url"], use_container_width=True)
-        else:
-            col_img.markdown(f"<div style='font-size:2.2rem;text-align:center'>{c['emoji']}</div>",
-                             unsafe_allow_html=True)
-        if col_btn.button(f"{esc(c['name'])}  ·  {n}", key=f"cat_{c['id']}"):
-            st.session_state.cat_id = c["id"]
-            st.session_state["who_pill"] = "Tutti"
-            st.rerun()
+    with st.container(key="catlist"):
+        for c in categories:
+            n = sum(1 for i in items if i["category_id"] == c["id"])
+            col_img, col_btn = st.columns([1, 4], vertical_alignment="center")
+            if c.get("cover_url"):
+                col_img.image(c["cover_url"], use_container_width=True)
+            else:
+                col_img.markdown(f"<div style='font-size:2.2rem;text-align:center'>{c['emoji']}</div>",
+                                 unsafe_allow_html=True)
+            if col_btn.button(f"{esc(c['name'])}  ·  {n}", key=f"cat_{c['id']}"):
+                st.session_state.cat_id = c["id"]
+                st.session_state["who_pill"] = "Tutti"
+                st.rerun()
 
 
 # ---------------------------------------------------------------- CATEGORIA
