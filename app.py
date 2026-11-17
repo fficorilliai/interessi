@@ -10,26 +10,45 @@ st.set_page_config(page_title="Interessi", page_icon="💜", layout="centered")
 
 WHO = ["Emma", "Fede", "Entrambi"]
 WHO_ICON = {"Emma": "💗", "Fede": "💙", "Entrambi": "💜"}
+WHO_COLOR = {"Emma": "#c2456b", "Fede": "#3a6ea5", "Entrambi": "#6b4fb3"}
 BUCKET = "photos"
+
+# Metti True per riattivare le foto sugli elementi (le categorie le hanno sempre)
+SHOW_ITEM_PHOTOS = False
 
 CSS = """
 <style>
-.stApp { background:#0e1117; }
+.stApp { background:#faf6f0; }
 .block-container { padding: 4rem 0.9rem 4rem; max-width: 640px; }
 h1, h2, h3 { letter-spacing: -0.02em; }
 div.stButton > button {
     width: 100%; text-align: left; justify-content: flex-start;
-    background:#171b24; border:1px solid #262c3a; border-radius:14px;
-    padding: .85rem 1rem; color:#e8eaf0; min-height: 3.2rem;
+    background:#fffdf9; border:1px solid #e0d5c5; border-radius:14px;
+    padding: .85rem 1rem; color:#2b2622; min-height: 3.2rem;
 }
-div.stButton > button:hover { border-color:#7c6cf0; color:#fff; }
+div.stButton > button:hover { border-color:#c8553d; color:#c8553d; }
 div[data-testid="stImage"] img { border-radius:12px; object-fit:cover; }
 div[data-testid="stColumn"] div[data-testid="stImage"] img {
     width:100%; height:auto; aspect-ratio:1/1; object-fit:cover;
 }
+/* lista pulita degli elementi */
+.st-key-itemlist [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important; gap: .5rem !important;
+    align-items: center; border-top: 1px solid #e8dfd2;
+}
+.st-key-itemlist [data-testid="stColumn"] { min-width: 0 !important; }
+.st-key-itemlist [data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; }
+.st-key-itemlist [data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; }
+.st-key-itemlist div.stButton > button {
+    background: transparent; border: none; border-radius: 0;
+    padding: .8rem 0; min-height: 0; font-size: 1rem;
+}
+.st-key-itemlist div.stButton > button:hover { color:#c8553d; background: transparent; }
+.tag { font-size:.85rem; white-space:nowrap; text-align:right; }
+.count { color:#8a7f73; font-size:.9rem; margin:-0.4rem 0 .8rem; }
 .badge { display:inline-block; padding:.15rem .6rem; border-radius:999px;
-         font-size:.8rem; background:#232838; color:#cfd3e0; }
-.muted { color:#8b92a5; font-size:.85rem; }
+         font-size:.8rem; background:#efe6d8; color:#5a4f44; }
+.muted { color:#8a7f73; font-size:.85rem; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -125,7 +144,7 @@ def remove_photo(path):
 
 # ---------------------------------------------------------------- stato
 st.session_state.setdefault("cat_id", None)
-st.session_state.setdefault("who_filter", "Tutti")
+st.session_state.setdefault("who_pill", "Tutti")
 
 categories, items = safe_load()
 cat_by_id = {c["id"]: c for c in categories}
@@ -138,7 +157,7 @@ def item_dialog(item_id: int):
     if not item:
         st.info("Elemento non trovato.")
         return
-    if item.get("photo_url"):
+    if SHOW_ITEM_PHOTOS and item.get("photo_url"):
         st.image(item["photo_url"], use_container_width=True)
     st.subheader(esc(item["name"]))
     st.markdown(
@@ -155,10 +174,11 @@ def item_dialog(item_id: int):
                 "A chi piace?", WHO, index=WHO.index(item["liked_by"]), horizontal=True
             )
             notes = st.text_area("Note", item.get("notes") or "")
-            new_photo = st.file_uploader("Cambia foto", type=["jpg", "jpeg", "png", "webp"])
-            drop_photo = False
-            if item.get("photo_url"):
-                drop_photo = st.checkbox("Rimuovi la foto attuale")
+            new_photo, drop_photo = None, False
+            if SHOW_ITEM_PHOTOS:
+                new_photo = st.file_uploader("Cambia foto", type=["jpg", "jpeg", "png", "webp"])
+                if item.get("photo_url"):
+                    drop_photo = st.checkbox("Rimuovi la foto attuale")
             if st.form_submit_button("Salva", use_container_width=True):
                 try:
                     data = {"name": name.strip(), "liked_by": who, "notes": notes.strip()}
@@ -226,7 +246,7 @@ def home():
                              unsafe_allow_html=True)
         if col_btn.button(f"{esc(c['name'])}  ·  {n}", key=f"cat_{c['id']}"):
             st.session_state.cat_id = c["id"]
-            st.session_state.who_filter = "Tutti"
+            st.session_state["who_pill"] = "Tutti"
             st.rerun()
 
 
@@ -236,14 +256,18 @@ def category_page(cat):
         st.session_state.cat_id = None
         st.rerun()
 
+    in_cat = [i for i in items if i["category_id"] == cat["id"]]
     st.title(f"{cat['emoji']} {esc(cat['name'])}")
+    st.markdown(f'<div class="count">{len(in_cat)} elementi</div>', unsafe_allow_html=True)
 
     with st.expander("➕ Aggiungi elemento"):
         with st.form("new_item", clear_on_submit=True):
             name = st.text_input("Nome")
             who = st.radio("A chi piace?", WHO, horizontal=True)
-            notes = st.text_area("Note (facoltative)")
-            photo = st.file_uploader("Foto (facoltativa)", type=["jpg", "jpeg", "png", "webp"])
+            notes = st.text_area("Note (facoltative)", height=80)
+            photo = None
+            if SHOW_ITEM_PHOTOS:
+                photo = st.file_uploader("Foto (facoltativa)", type=["jpg", "jpeg", "png", "webp"])
             if st.form_submit_button("Aggiungi", use_container_width=True):
                 if not name.strip():
                     st.warning("Serve un nome.")
@@ -259,30 +283,22 @@ def category_page(cat):
                     except Exception as e:
                         st.error(f"Non sono riuscito a salvare: {e}")
 
-    options = ["Tutti"] + [f"{WHO_ICON[w]} {w}" for w in WHO]
-    current = st.session_state.who_filter
-    choice = st.radio("Filtra", options, horizontal=True,
-                      index=options.index(current) if current in options else 0,
-                      label_visibility="collapsed")
-    st.session_state.who_filter = choice
+    choice = st.pills("Filtra", ["Tutti"] + WHO, key="who_pill",
+                      selection_mode="single", label_visibility="collapsed") or "Tutti"
 
-    rows = [i for i in items if i["category_id"] == cat["id"]]
-    if choice != "Tutti":
-        wanted = choice.split(" ", 1)[1]
-        rows = [i for i in rows if i["liked_by"] == wanted]
+    rows = in_cat if choice == "Tutti" else [i for i in in_cat if i["liked_by"] == choice]
 
     if not rows:
         st.info("Niente qui per ora.")
-    for i in rows:
-        col_img, col_btn = st.columns([1, 4], vertical_alignment="center")
-        if i.get("photo_url"):
-            col_img.image(i["photo_url"], use_container_width=True)
-        else:
-            col_img.markdown("<div style='font-size:1.8rem;text-align:center'>🖼️</div>",
-                             unsafe_allow_html=True)
-        if col_btn.button(f"{esc(i['name'])}  ·  {WHO_ICON[i['liked_by']]} {i['liked_by']}",
-                          key=f"it_{i['id']}"):
-            item_dialog(i["id"])
+    with st.container(key="itemlist"):
+        for i in rows:
+            col_name, col_tag = st.columns([5, 2], vertical_alignment="center")
+            if col_name.button(esc(i["name"]), key=f"it_{i['id']}"):
+                item_dialog(i["id"])
+            col_tag.markdown(
+                f'<div class="tag" style="color:{WHO_COLOR[i["liked_by"]]}">{i["liked_by"]}</div>',
+                unsafe_allow_html=True,
+            )
 
     st.divider()
     with st.expander("⚙️ Impostazioni categoria"):
@@ -318,7 +334,7 @@ def category_page(cat):
         confirm = st.checkbox("Elimina questa categoria e tutto quello che contiene", key="cat_del_ok")
         if st.button("🗑️ Elimina categoria", disabled=not confirm):
             try:
-                for i in rows if choice == "Tutti" else [x for x in items if x["category_id"] == cat["id"]]:
+                for i in in_cat:
                     remove_photo(i.get("photo_path"))
                 remove_photo(cat.get("cover_path"))
                 get_client().table("categories").delete().eq("id", cat["id"]).execute()
