@@ -153,6 +153,9 @@ def item_dialog(item_id: int):
             )
             notes = st.text_area("Note", item.get("notes") or "")
             new_photo = st.file_uploader("Cambia foto", type=["jpg", "jpeg", "png", "webp"])
+            drop_photo = False
+            if item.get("photo_url"):
+                drop_photo = st.checkbox("Rimuovi la foto attuale")
             if st.form_submit_button("Salva", use_container_width=True):
                 try:
                     data = {"name": name.strip(), "liked_by": who, "notes": notes.strip()}
@@ -160,6 +163,9 @@ def item_dialog(item_id: int):
                         url, path = upload_photo(new_photo, "items")
                         remove_photo(item.get("photo_path"))
                         data.update(photo_url=url, photo_path=path)
+                    elif drop_photo:
+                        remove_photo(item.get("photo_path"))
+                        data.update(photo_url=None, photo_path=None)
                     get_client().table("items").update(data).eq("id", item_id).execute()
                     refresh()
                     st.rerun()
@@ -277,6 +283,35 @@ def category_page(cat):
 
     st.divider()
     with st.expander("⚙️ Impostazioni categoria"):
+        with st.form("edit_cat"):
+            c1, c2 = st.columns([1, 3])
+            new_emoji = c1.text_input("Emoji", cat["emoji"], max_chars=4)
+            new_name = c2.text_input("Nome", cat["name"])
+            if cat.get("cover_url"):
+                st.image(cat["cover_url"], width=120)
+            new_cover = st.file_uploader("Cambia foto copertina", type=["jpg", "jpeg", "png", "webp"])
+            drop_cover = False
+            if cat.get("cover_url"):
+                drop_cover = st.checkbox("Rimuovi la foto di copertina")
+            if st.form_submit_button("Salva modifiche", use_container_width=True):
+                if not new_name.strip():
+                    st.warning("Serve un nome.")
+                else:
+                    try:
+                        data = {"name": new_name.strip(), "emoji": new_emoji.strip() or "📁"}
+                        if new_cover:
+                            url, path = upload_photo(new_cover, "categories")
+                            remove_photo(cat.get("cover_path"))
+                            data.update(cover_url=url, cover_path=path)
+                        elif drop_cover:
+                            remove_photo(cat.get("cover_path"))
+                            data.update(cover_url=None, cover_path=None)
+                        get_client().table("categories").update(data).eq("id", cat["id"]).execute()
+                        refresh()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Non sono riuscito a salvare: {e}")
+
         confirm = st.checkbox("Elimina questa categoria e tutto quello che contiene", key="cat_del_ok")
         if st.button("🗑️ Elimina categoria", disabled=not confirm):
             try:
