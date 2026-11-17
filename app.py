@@ -1,5 +1,8 @@
+import html
 import io
 import uuid
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 from PIL import Image, ImageOps
@@ -15,6 +18,13 @@ WHO = ["Emma", "Fede", "Entrambi"]
 WHO_ICON = {"Emma": "💗", "Fede": "💙", "Entrambi": "💜"}
 WHO_COLOR = {"Emma": "#c2456b", "Fede": "#3a6ea5", "Entrambi": "#6b4fb3"}
 BUCKET = "photos"
+
+TZ = ZoneInfo("Europe/Rome")  # tutti gli orari degli eventi sono ora italiana
+ICS_FILE = "interessi.ics"
+ALERTS = [("-P1D", "Tra 24 ore"), ("-PT1H", "Tra 1 ora")]  # avvisi nel calendario
+DAYS_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+MONTHS_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
+             "agosto", "settembre", "ottobre", "novembre", "dicembre"]
 
 # Metti True per riattivare le foto sugli elementi (le categorie le hanno sempre)
 SHOW_ITEM_PHOTOS = False
@@ -54,6 +64,30 @@ div[data-testid="stColumn"] div[data-testid="stImage"] img {
     padding: .8rem 0; min-height: 0; font-size: 1rem;
 }
 .st-key-itemlist div.stButton > button:hover { color:#c8553d; background: transparent; }
+/* interruttore Liste / Programma a tutta larghezza */
+.st-key-sectionbar [data-testid="stButtonGroup"] { width: 100%; }
+.st-key-sectionbar [data-testid="stButtonGroup"] button { flex: 1 1 0; }
+/* ora di inizio e fine sempre affiancate */
+[class*="st-key-timepair"] [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: .6rem !important; }
+[class*="st-key-timepair"] [data-testid="stColumn"] { min-width: 0 !important; }
+/* lista del programma: ora | titolo | etichetta */
+.st-key-eventlist [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important; gap: .6rem !important;
+    align-items: center; border-top: 1px solid #e8dfd2; padding: .25rem 0;
+}
+.st-key-eventlist [data-testid="stColumn"] { min-width: 0 !important; }
+.st-key-eventlist [data-testid="stColumn"]:first-child { flex: 0 0 3.4rem !important; width: 3.4rem !important; }
+.st-key-eventlist [data-testid="stColumn"]:nth-child(2) { flex: 1 1 0 !important; width: auto !important; }
+.st-key-eventlist [data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; }
+.st-key-eventlist div.stButton > button {
+    background: transparent; border: none; border-radius: 0;
+    padding: .5rem 0 .1rem; min-height: 0; font-size: 1rem;
+}
+.st-key-eventlist div.stButton > button:hover { color:#c8553d; background: transparent; }
+.evtime { font-size:.85rem; line-height:1.35; color:#2b2622; }
+.evtime span { color:#8a7f73; }
+.place { color:#8a7f73; font-size:.8rem; margin-top:-.3rem; padding-bottom:.4rem; }
+.dayhead { color:#8a7f73; font-size:.8rem; margin:1.1rem 0 .2rem; }
 .tag { font-size:.85rem; white-space:nowrap; text-align:right; }
 .count { color:#8a7f73; font-size:.9rem; margin:-0.4rem 0 .8rem; }
 .badge { display:inline-block; padding:.15rem .6rem; border-radius:999px;
@@ -109,9 +143,18 @@ def load_items():
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def load_events():
+    return (
+        get_client().table("events").select("*")
+        .order("event_date").order("start_time").execute().data
+    )
+
+
 def refresh():
     load_categories.clear()
     load_items.clear()
+    load_events.clear()
 
 
 def safe_load():
@@ -218,9 +261,6 @@ def item_dialog(item_id: int):
 
 # ---------------------------------------------------------------- HOME
 def home():
-    st.title(APP_TITLE)
-    st.caption("Le nostre liste: film, vini, cibi e tutto quello che ci piace.")
-
     with st.expander("➕ Nuova categoria"):
         with st.form("new_cat", clear_on_submit=True):
             c1, c2 = st.columns([1, 3])
@@ -356,10 +396,240 @@ def category_page(cat):
                 st.error(f"Errore: {e}")
 
 
+# ---------------------------------------------------------------- PROGRAMMA
+VTIMEZONE = [
+    "BEGIN:VTIMEZONE", "TZID:Europe/Rome",
+    "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST",
+    "DTSTART:19700329T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",
+    "BEGIN:STANDARD", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "TZNAME:CET",
+    "DTSTART:19701025T030000", "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU", "END:STANDARD",
+    "END:VTIMEZONE",
+]
+
+
+def ev_start(e) -> datetime:
+    return datetime.combine(date.fromisoformat(e["event_date"]),
+                            time.fromisoformat(e["start_time"]), tzinfo=TZ)
+
+
+def ev_end(e) -> datetime:
+    return datetime.combine(date.fromisoformat(e["event_date"]),
+                            time.fromisoformat(e["end_time"]), tzinfo=TZ)
+
+
+def future_events(events):
+    """Solo gli eventi non ancora finiti (l'ora attuale è calcolata ogni volta)."""
+    now = datetime.now(TZ)
+    return [e for e in events if ev_end(e) >= now]
+
+
+def fmt_day(d: date) -> str:
+    return f"{DAYS_IT[d.weekday()]} {d.day} {MONTHS_IT[d.month - 1]}"
+
+
+def _ics_escape(text) -> str:
+    return (str(text or "").replace("\\", "\\\\").replace(";", "\\;")
+            .replace(",", "\\,").replace("\r", "").replace("\n", "\\n"))
+
+
+def _ics_fold(line: str) -> bytes:
+    """Le righe di un file .ics non possono superare 75 byte: vanno spezzate."""
+    raw = line.encode("utf-8")
+    out = []
+    while len(raw) > 75:
+        cut = 75
+        while cut > 0 and (raw[cut] & 0xC0) == 0x80:  # non spezzare un carattere
+            cut -= 1
+        out.append(raw[:cut])
+        raw = b" " + raw[cut:]
+    out.append(raw)
+    return b"\r\n".join(out)
+
+
+def _parse_ts(value) -> datetime:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def build_ics(events) -> bytes:
+    """File calendario con tutti gli eventi. L'UID fisso permette al calendario di
+    aggiornare un evento già importato invece di duplicarlo; SEQUENCE cresce
+    solo quando l'evento viene modificato."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Interessi//IT",
+             "CALSCALE:GREGORIAN", "METHOD:PUBLISH", *VTIMEZONE]
+    for e in events:
+        upd = _parse_ts(e.get("updated_at") or e.get("created_at"))
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{e['uid']}@interessi",
+            f"DTSTAMP:{stamp}",
+            f"LAST-MODIFIED:{upd.strftime('%Y%m%dT%H%M%SZ')}",
+            f"SEQUENCE:{int(upd.timestamp())}",
+            f"DTSTART;TZID=Europe/Rome:{ev_start(e).strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND;TZID=Europe/Rome:{ev_end(e).strftime('%Y%m%dT%H%M%S')}",
+            f"SUMMARY:{_ics_escape(e['title'])}",
+        ]
+        if e.get("place"):
+            lines.append(f"LOCATION:{_ics_escape(e['place'])}")
+        lines.append(f"DESCRIPTION:{_ics_escape('Per: ' + e['who'])}")
+        for trigger, label in ALERTS:
+            lines += ["BEGIN:VALARM", "ACTION:DISPLAY",
+                      f"DESCRIPTION:{_ics_escape(label + ': ' + e['title'])}",
+                      f"TRIGGER:{trigger}", "END:VALARM"]
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    return b"\r\n".join(_ics_fold(line) for line in lines) + b"\r\n"
+
+
+def event_fields(prefix: str, ev=None):
+    title = st.text_input("Titolo", ev["title"] if ev else "", key=f"{prefix}_title")
+    day = st.date_input("Data", date.fromisoformat(ev["event_date"]) if ev else datetime.now(TZ).date(),
+                        format="DD/MM/YYYY", key=f"{prefix}_day")
+    with st.container(key=f"timepair_{prefix}"):
+        c1, c2 = st.columns(2)
+        start = c1.time_input("Inizio", time.fromisoformat(ev["start_time"]) if ev else time(19, 0),
+                              step=900, key=f"{prefix}_start")
+        end = c2.time_input("Fine", time.fromisoformat(ev["end_time"]) if ev else time(21, 0),
+                            step=900, key=f"{prefix}_end")
+    place = st.text_input("Luogo (facoltativo)", (ev.get("place") or "") if ev else "",
+                          key=f"{prefix}_place")
+    who = st.radio("A chi riguarda", WHO, index=WHO.index(ev["who"]) if ev else 2,
+                   horizontal=True, key=f"{prefix}_who")
+    return title, day, start, end, place, who
+
+
+def event_error(title, start, end):
+    if not title.strip():
+        return "Serve un titolo."
+    if end <= start:
+        return "L'ora di fine deve essere dopo quella di inizio."
+    return None
+
+
+def event_payload(title, day, start, end, place, who) -> dict:
+    return {"title": title.strip(), "event_date": day.isoformat(),
+            "start_time": start.strftime("%H:%M:%S"), "end_time": end.strftime("%H:%M:%S"),
+            "place": place.strip() or None, "who": who}
+
+
+@st.dialog("Evento")
+def event_dialog(event_id: int):
+    ev = next((e for e in load_events() if e["id"] == event_id), None)
+    if not ev:
+        st.info("Evento non trovato.")
+        return
+    s, f = ev_start(ev), ev_end(ev)
+    st.subheader(esc(ev["title"]))
+    st.markdown(f"{fmt_day(s.date())}, {s:%H:%M}–{f:%H:%M}")
+    if ev.get("place"):
+        st.markdown(esc(ev["place"]))
+    st.markdown(f'<span class="badge">{WHO_ICON[ev["who"]]} {ev["who"]}</span>',
+                unsafe_allow_html=True)
+
+    with st.expander("✏️ Modifica"):
+        with st.form(f"evedit_{event_id}"):
+            vals = event_fields(f"evedit{event_id}", ev)
+            if st.form_submit_button("Salva", use_container_width=True):
+                err = event_error(vals[0], vals[2], vals[3])
+                if err:
+                    st.warning(err)
+                else:
+                    try:
+                        data = event_payload(*vals)
+                        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+                        get_client().table("events").update(data).eq("id", event_id).execute()
+                        refresh()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore nel salvataggio: {e}")
+
+    confirm = st.checkbox("Sì, voglio eliminarlo", key=f"evdel_ok_{event_id}")
+    if st.button("🗑️ Elimina", disabled=not confirm, key=f"evdel_{event_id}"):
+        try:
+            get_client().table("events").delete().eq("id", event_id).execute()
+            refresh()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Errore: {e}")
+
+
+def programma():
+    try:
+        events = load_events()
+    except Exception as e:  # tabella mancante o database non raggiungibile
+        st.error("Non riesco a leggere gli eventi. Hai eseguito `setup_eventi.sql` su Supabase?")
+        st.caption(str(e))
+        return
+
+    upcoming = future_events(events)
+    if upcoming:
+        st.download_button("Aggiungi tutto al calendario", data=build_ics(upcoming),
+                           file_name=ICS_FILE, mime="text/calendar",
+                           type="primary", use_container_width=True)
+        n = len(upcoming)
+        st.markdown(f'<div class="count" style="text-align:center;margin-top:.4rem">'
+                    f'{n} {"evento" if n == 1 else "eventi"} in programma</div>',
+                    unsafe_allow_html=True)
+    else:
+        st.info("Nessun evento in programma.")
+
+    n_form = st.session_state.setdefault("ev_n", 0)
+    with st.expander("➕ Nuovo evento"):
+        with st.form("new_event"):
+            vals = event_fields(f"new{n_form}")
+            if st.form_submit_button("Aggiungi", use_container_width=True, type="primary"):
+                err = event_error(vals[0], vals[2], vals[3])
+                if err:
+                    st.warning(err)
+                else:
+                    try:
+                        get_client().table("events").insert(event_payload(*vals)).execute()
+                        st.session_state["ev_n"] = n_form + 1  # svuota il modulo
+                        refresh()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Non sono riuscito a salvare: {e}")
+
+    days = {}
+    for e in upcoming:
+        days.setdefault(e["event_date"], []).append(e)
+    with st.container(key="eventlist"):
+        for d, evs in days.items():
+            st.markdown(f'<div class="dayhead">{fmt_day(date.fromisoformat(d))}</div>',
+                        unsafe_allow_html=True)
+            for e in evs:
+                c_time, c_title, c_tag = st.columns([1, 4, 2], vertical_alignment="center")
+                c_time.markdown(
+                    f'<div class="evtime">{ev_start(e):%H:%M}<br><span>{ev_end(e):%H:%M}</span></div>',
+                    unsafe_allow_html=True)
+                if c_title.button(esc(e["title"]), key=f"ev_{e['id']}"):
+                    event_dialog(e["id"])
+                if e.get("place"):
+                    c_title.markdown(f'<div class="place">{html.escape(e["place"])}</div>',
+                                     unsafe_allow_html=True)
+                c_tag.markdown(
+                    f'<div class="tag" style="color:{WHO_COLOR[e["who"]]}">{e["who"]}</div>',
+                    unsafe_allow_html=True)
+
+
 # ---------------------------------------------------------------- routing
+def top_bar() -> str:
+    st.title(APP_TITLE)
+    with st.container(key="sectionbar"):
+        section = st.segmented_control("Sezione", ["Liste", "Programma"], key="section",
+                                       selection_mode="single", label_visibility="collapsed")
+    return section or "Liste"
+
+
 current_cat = cat_by_id.get(st.session_state.cat_id)
 if current_cat:
     category_page(current_cat)
 else:
     st.session_state.cat_id = None
-    home()
+    if top_bar() == "Programma":
+        programma()
+    else:
+        home()
