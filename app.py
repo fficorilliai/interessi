@@ -6,7 +6,10 @@ from PIL import Image, ImageOps
 from supabase import create_client
 
 # ---------------------------------------------------------------- config
-st.set_page_config(page_title="Interessi", page_icon="💜", layout="centered")
+APP_TITLE = "Interessi"  # cambia qui il nome dell'app
+APP_ICON = "📌"  # icona della scheda del browser
+
+st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout="centered")
 
 WHO = ["Emma", "Fede", "Entrambi"]
 WHO_ICON = {"Emma": "💗", "Fede": "💙", "Entrambi": "💜"}
@@ -64,7 +67,7 @@ def check_password() -> bool:
     pwd = st.secrets.get("APP_PASSWORD")
     if not pwd or st.session_state.get("auth"):
         return True
-    st.title("💜 Interessi")
+    st.title(APP_TITLE)
     entered = st.text_input("Password", type="password")
     if entered:
         if entered == pwd:
@@ -208,7 +211,7 @@ def item_dialog(item_id: int):
 
 # ---------------------------------------------------------------- HOME
 def home():
-    st.title("💜 Interessi")
+    st.title(APP_TITLE)
     st.caption("Le nostre liste: film, vini, cibi e tutto quello che ci piace.")
 
     with st.expander("➕ Nuova categoria"):
