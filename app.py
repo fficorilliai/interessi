@@ -57,6 +57,9 @@ div[data-testid="stColumn"] div[data-testid="stImage"] img {
     align-items: center; border-top: 1px solid #e8dfd2;
 }
 .st-key-itemlist [data-testid="stColumn"] { min-width: 0 !important; }
+.st-key-itemlist [data-testid="stColumn"] [data-testid="stVerticalBlock"] { gap: 0 !important; }
+.st-key-itemlist, .st-key-eventlist { gap: 0 !important; }
+.st-key-itemlist [data-testid="stMarkdownContainer"], .st-key-eventlist [data-testid="stMarkdownContainer"] { margin-bottom: 0 !important; }
 .st-key-itemlist [data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; }
 .st-key-itemlist [data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; }
 .st-key-itemlist div.stButton > button {
@@ -65,8 +68,13 @@ div[data-testid="stColumn"] div[data-testid="stImage"] img {
 }
 .st-key-itemlist div.stButton > button:hover { color:#c8553d; background: transparent; }
 /* interruttore Liste / Programma a tutta larghezza */
-.st-key-sectionbar [data-testid="stButtonGroup"] { width: 100%; }
-.st-key-sectionbar [data-testid="stButtonGroup"] button { flex: 1 1 0; }
+.st-key-sectionbar [data-testid="stElementContainer"],
+.st-key-sectionbar [data-testid="stButtonGroup"],
+.st-key-sectionbar [data-testid="stButtonGroup"] > div { width: 100% !important; max-width: none !important; }
+.st-key-sectionbar [data-testid="stButtonGroup"] > div { display: flex; }
+.st-key-sectionbar button { flex: 1 1 0 !important; justify-content: center; padding: .55rem 0; }
+.st-key-sectionbar button[aria-checked="true"] { background:#c8553d !important; color:#fff; border-color:#c8553d !important; }
+.st-key-sectionbar button[aria-checked="true"] * { color:#fff !important; }
 /* ora di inizio e fine sempre affiancate */
 [class*="st-key-timepair"] [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: .6rem !important; }
 [class*="st-key-timepair"] [data-testid="stColumn"] { min-width: 0 !important; }
@@ -84,9 +92,10 @@ div[data-testid="stColumn"] div[data-testid="stImage"] img {
     padding: .5rem 0 .1rem; min-height: 0; font-size: 1rem;
 }
 .st-key-eventlist div.stButton > button:hover { color:#c8553d; background: transparent; }
+.st-key-eventlist [data-testid="stColumn"] [data-testid="stVerticalBlock"] { gap: 0 !important; }
 .evtime { font-size:.85rem; line-height:1.35; color:#2b2622; }
 .evtime span { color:#8a7f73; }
-.place { color:#8a7f73; font-size:.8rem; margin-top:-.3rem; padding-bottom:.4rem; }
+.place { color:#8a7f73; font-size:.8rem; margin-top:-.1rem; padding-bottom:.5rem; }
 .dayhead { color:#8a7f73; font-size:.8rem; margin:1.1rem 0 .2rem; }
 .tag { font-size:.85rem; white-space:nowrap; text-align:right; }
 .count { color:#8a7f73; font-size:.9rem; margin:-0.4rem 0 .8rem; }
@@ -620,7 +629,8 @@ def top_bar() -> str:
     st.title(APP_TITLE)
     with st.container(key="sectionbar"):
         section = st.segmented_control("Sezione", ["Liste", "Programma"], key="section",
-                                       selection_mode="single", label_visibility="collapsed")
+                                       default="Liste", selection_mode="single",
+                                       label_visibility="collapsed")
     return section or "Liste"
 
 
