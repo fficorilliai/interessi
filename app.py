@@ -575,12 +575,20 @@ def programma():
 
     upcoming = future_events(events)
     if upcoming:
-        st.download_button("Aggiungi tutto al calendario", data=build_ics(upcoming),
-                           file_name=ICS_FILE, mime="text/calendar",
-                           type="primary", use_container_width=True)
-        n = len(upcoming)
-        st.markdown(f'<div class="count" style="text-align:center;margin-top:.4rem">'
-                    f'{n} {"evento" if n == 1 else "eventi"} in programma</div>',
+        # quali eventi finiscono nel file: si può scegliere una o più persone
+        chosen = st.pills("Scarica gli eventi di", WHO, selection_mode="multi",
+                          default=WHO, key="export_who") or []
+        to_export = [e for e in upcoming if e["who"] in chosen]
+        if to_export:
+            st.download_button("Aggiungi al calendario", data=build_ics(to_export),
+                               file_name=ICS_FILE, mime="text/calendar",
+                               type="primary", use_container_width=True)
+            k, n = len(to_export), len(upcoming)
+            word = "evento" if k == 1 else "eventi"
+            note = f"{k} {word} nel file" + (f" (su {n} in programma)" if k != n else "")
+        else:
+            note = "Scegli almeno una persona per scaricare gli eventi."
+        st.markdown(f'<div class="count" style="text-align:center;margin-top:.4rem">{note}</div>',
                     unsafe_allow_html=True)
     else:
         st.info("Nessun evento in programma.")
