@@ -575,19 +575,25 @@ def programma():
 
     upcoming = future_events(events)
     if upcoming:
-        # quali eventi finiscono nel file: si può scegliere una o più persone
-        chosen = st.pills("Scarica gli eventi di", WHO, selection_mode="multi",
-                          default=WHO, key="export_who") or []
-        to_export = [e for e in upcoming if e["who"] in chosen]
+        # Si sceglie una persona: nel file vanno i suoi eventi + quelli "Entrambi".
+        # Con l'indirizzo dell'app seguito da ?chi=Emma parte già su Emma.
+        start = st.query_params.get("chi", "Fede")
+        start = start if start in ("Emma", "Fede") else "Fede"
+        chosen = st.pills("Scarica gli eventi di", ["Fede", "Emma"], selection_mode="single",
+                          default=start, key="export_who")
+        to_export = [e for e in upcoming if e["who"] in (chosen, "Entrambi")] if chosen else []
         if to_export:
             st.download_button("Aggiungi al calendario", data=build_ics(to_export),
                                file_name=ICS_FILE, mime="text/calendar",
                                type="primary", use_container_width=True)
             k, n = len(to_export), len(upcoming)
             word = "evento" if k == 1 else "eventi"
-            note = f"{k} {word} nel file" + (f" (su {n} in programma)" if k != n else "")
+            note = (f"{k} {word} nel file: quelli di {chosen} e quelli di Entrambi"
+                    + (f" (su {n} in programma)" if k != n else ""))
+        elif chosen:
+            note = f"Nessun evento di {chosen} o di Entrambi in programma."
         else:
-            note = "Scegli almeno una persona per scaricare gli eventi."
+            note = "Scegli Fede o Emma per scaricare gli eventi."
         st.markdown(f'<div class="count" style="text-align:center;margin-top:.4rem">{note}</div>',
                     unsafe_allow_html=True)
     else:
